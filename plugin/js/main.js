@@ -103,7 +103,22 @@ var main = (function() {
     function metaInfoFromControls() {
         let metaInfo = new EpubMetaInfo();
         metaInfo.uuid = getValueFromUiField("startingUrlInput");
-        metaInfo.title = getValueFromUiField("titleInput");
+        let baseTitle = getValueFromUiField("titleInput");
+        let rangeStart = document.getElementById("selectRangeStartChapter");
+        let rangeEnd = document.getElementById("selectRangeEndChapter");
+
+        function extractChapterNum(selectEl, fallbackIndex) {
+            if (!selectEl || selectEl.selectedIndex < 0 || !selectEl.options[selectEl.selectedIndex]) {
+                return String(fallbackIndex + 1);
+            }
+            let label = selectEl.options[selectEl.selectedIndex].text;
+            let m = label.match(/(?:chapter|ch\.?)\s*(\d+(?:\.\d+)?)/i);
+            return m ? m[1] : String(fallbackIndex + 1);
+        }
+
+        let startLabel = rangeStart ? extractChapterNum(rangeStart, rangeStart.selectedIndex) : "1";
+        let endLabel = rangeEnd ? extractChapterNum(rangeEnd, rangeEnd.selectedIndex) : "";
+        metaInfo.title = endLabel ? `${startLabel}-${endLabel} ${baseTitle}` : baseTitle;
         metaInfo.author = getValueFromUiField("authorInput");
         metaInfo.language = getValueFromUiField("languageInput");
         metaInfo.fileName = getValueFromUiField("fileNameInput");
@@ -132,6 +147,22 @@ var main = (function() {
         }
     }
 
+    // The 4 "pack" buttons that kick off a fetch+pack run.  All of them
+    // are greyed out together whenever any one of them is clicked, and
+    // re-enabled together once the fetch+pack work has finished.
+    function getAllPackButtons() {
+        return [
+            getPackEpubButton(),
+            document.getElementById("packFirst10ChaptersButton"),
+            document.getElementById("packFirst50ChaptersButton"),
+            document.getElementById("packFirst100ChaptersButton"),
+        ];
+    }
+
+    function setPackButtonsDisabled(disabled) {
+        getAllPackButtons().forEach(b => b.disabled = disabled);
+    }
+
     async function fetchContentAndPackEpub() {
         let libclick = this;
         if (document.getElementById("noAdditionalMetadataCheckbox").checked == true) {
@@ -148,19 +179,32 @@ var main = (function() {
             }
         }
 
-        ChapterUrlsUI.limitNumOfChapterS(userPreferences.maxChaptersPerEpub.value);
+        console.log(`[web2epub] fetchContentAndPackEpub: maxChaptersPerEpub=${userPreferences.maxChaptersPerEpub.value}, first10Silent=${window.first10Silent}`);
+        let rowsBeforeLimit = ChapterUrlsUI.getTableRowsWithChapters();
+        let checkedBeforeLimit = rowsBeforeLimit.filter(r => r.querySelector("input[type='checkbox']").checked).length;
+        console.log(`[web2epub] before limitNumOfChapterS: total rows=${rowsBeforeLimit.length}, checked=${checkedBeforeLimit}`);
+        ChapterUrlsUI.limitNumOfChapterS(userPreferences.maxChaptersPerEpub.value, window.first10Silent === true);
+        let rowsAfterLimit = ChapterUrlsUI.getTableRowsWithChapters();
+        let checkedAfterLimit = rowsAfterLimit.filter(r => r.querySelector("input[type='checkbox']").checked).length;
+        console.log(`[web2epub] after limitNumOfChapterS: total rows=${rowsAfterLimit.length}, checked=${checkedAfterLimit}`);
         ChapterUrlsUI.resetDownloadStateImages();
         ErrorLog.clearHistory();
         window.workInProgress = true;
-        main.getPackEpubButton().disabled = true;
+        setPackButtonsDisabled(true);
         replaceLibAddToLibrary();
         parser.onStartCollecting();
+        console.log(`[web2epub] starting parser.fetchContent()...`);
         await parser.fetchContent();
-        let content = await packEpub(metaInfo);
-        // Enable button here.  If user cancels save dialog
-        // the promise never returns
+        console.log(`[web2epub] parser.fetchContent() completed`);
+        // Set workInProgress=false HERE (after fetch, before pack+save)
+        // so the polling loop in fetchContentAndPackFirstNChapters can exit.
+        // packEpub and Download.save can hang on Kiwi/Android if the save
+        // dialog doesn't resolve, which previously trapped the flag forever.
         window.workInProgress = false;
-        main.getPackEpubButton().disabled = false;
+        console.log(`[web2epub] workInProgress cleared, starting packEpub...`);
+        let content = await packEpub(metaInfo);
+        console.log(`[web2epub] packEpub completed`);
+        setPackButtonsDisabled(false);
         replaceLibAddToLibrary();
         let overwriteExisting = userPreferences.overwriteExistingEpub.value;
         let backgroundDownload = userPreferences.noDownloadPopup.value;
@@ -184,13 +228,86 @@ var main = (function() {
             }
         } catch (err) {
             window.workInProgress = false;
-            main.getPackEpubButton().disabled = false;
+            setPackButtonsDisabled(false);
             if (util.sleepController.signal.aborted) {
                 util.sleepController = new AbortController;
             }
             replaceLibAddToLibrary();
             ErrorLog.showErrorMessage(err);
         }
+    }
+
+    async function fetchContentAndPackFirstNChapters(n) {
+        console.log(`[web2epub] fetchContentAndPackFirstNChapters called with n=${n}`);
+        setPackButtonsDisabled(true);
+        let original = userPreferences.maxChaptersPerEpub.value;
+        console.log(`[web2epub] original maxChaptersPerEpub=${original}`);
+        userPreferences.maxChaptersPerEpub.value = String(n);
+        window.first10Silent = true;
+        let rangeEnd = document.getElementById("selectRangeEndChapter");
+        let originalEndIndex = rangeEnd.selectedIndex;
+        console.log(`[web2epub] rangeEnd.length=${rangeEnd.length}, originalEndIndex=${originalEndIndex}`);
+        rangeEnd.selectedIndex = Math.min(n - 1, rangeEnd.length - 1);
+        console.log(`[web2epub] rangeEnd.selectedIndex set to ${rangeEnd.selectedIndex} (min of n-1=${n-1} and rangeEnd.length-1=${rangeEnd.length-1})`);
+
+        // Remember which chapters were checked/enabled for parsing before
+        // we hand off to fetchContentAndPackEpub(), which (via
+        // ChapterUrlsUI.limitNumOfChapterS()) will uncheck everything past
+        // the first n chapters.
+        let allRows = ChapterUrlsUI.getTableRowsWithChapters();
+        console.log(`[web2epub] total chapter rows in table: ${allRows.length}`);
+        let savedChapterSelection = allRows.map(row => ({
+            row: row,
+            checked: row.querySelector("input[type='checkbox']").checked,
+        }));
+        let checkedCount = savedChapterSelection.filter(x => x.checked).length;
+        console.log(`[web2epub] chapters checked before limit: ${checkedCount}`);
+
+        // Don't await the full fetchContentAndPackEpub() promise chain to
+        // re-enable these buttons: if the user cancels the native "Save As"
+        // dialog, that promise can hang indefinitely (a known quirk of the
+        // downloads API), which would leave these buttons disabled forever.
+        // Instead, restore everything as soon as the fetch/pack work itself
+        // (tracked by window.workInProgress) is done, regardless of what
+        // happens with the save dialog afterwards.
+        let restoreState = () => {
+            console.log(`[web2epub] restoreState called — restoring maxChaptersPerEpub to ${original}`);
+            userPreferences.maxChaptersPerEpub.value = original;
+            window.first10Silent = false;
+            rangeEnd.selectedIndex = originalEndIndex;
+            // Restore each chapter's checked state to what it was before
+            // this button was clicked.
+            savedChapterSelection.forEach(({row, checked}) => ChapterUrlsUI.setRowCheckboxState(row, checked));
+            setPackButtonsDisabled(false);
+        };
+        let restored = false;
+        let restoreOnce = () => {
+            if (!restored) {
+                restored = true;
+                restoreState();
+            }
+        };
+
+        window.workInProgress = true;
+        console.log(`[web2epub] about to call fetchContentAndPackEpub, window.workInProgress=${window.workInProgress}`);
+        let packPromise = fetchContentAndPackEpub.call(document.getElementById("packEpubButton"));
+        packPromise.then(restoreOnce).catch(restoreOnce);
+
+        // Poll for workInProgress flipping back to false (fetch/pack done,
+        // save dialog about to show or already showing) so the buttons come
+        // back even if the save dialog promise never settles.
+        // We pre-set window.workInProgress = true above so the loop doesn't
+        // exit immediately before fetchContentAndPackEpub() gets to run.
+        let pollCount = 0;
+        while (window.workInProgress === true) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            pollCount++;
+            if (pollCount % 20 === 0) {
+                console.log(`[web2epub] still polling... ${pollCount * 100}ms elapsed, workInProgress=${window.workInProgress}`);
+            }
+        }
+        console.log(`[web2epub] polling ended after ${pollCount * 100}ms, workInProgress=${window.workInProgress}`);
+        restoreOnce();
     }
 
     function replaceLibAddToLibrary() {
@@ -212,7 +329,11 @@ var main = (function() {
     function packEpub(metaInfo) {
         let epubVersion = epubVersionFromPreferences();
         let epub = new EpubPacker(metaInfo, epubVersion);
-        return epub.assemble(parser.epubItemSupplier());
+        ProgressBar.startPackingPhase();
+        let onProgress = (done, total) => ProgressBar.setPackingProgress(done, total);
+        return epub.assemble(parser.epubItemSupplier(), onProgress).finally(() => {
+            ProgressBar.endPackingPhase();
+        });
     }
 
     function dumpErrorLogToFile() {
@@ -522,6 +643,9 @@ var main = (function() {
 
     function addEventHandlers() {
         getPackEpubButton().onclick = fetchContentAndPackEpub;
+        document.getElementById("packFirst10ChaptersButton").addEventListener("click", () => fetchContentAndPackFirstNChapters(5));
+        document.getElementById("packFirst50ChaptersButton").addEventListener("click", () => fetchContentAndPackFirstNChapters(10));
+        document.getElementById("packFirst100ChaptersButton").addEventListener("click", () => fetchContentAndPackFirstNChapters(50));
         document.getElementById("diagnosticsCheckBoxInput").onclick = onDiagnosticsClick;
         document.getElementById("reloadButton").onclick = populateControls;
         getManuallySelectParserTag().onchange = populateControls;
@@ -619,17 +743,6 @@ var main = (function() {
 
     // actions to do when window opened
     window.onload = async () => {
-        if (typeof DOMPurify === "undefined" || typeof zip === "undefined") {
-            let msg = "Error: WebToEpub is missing required third-party dependencies (DOMPurify or zip.js).\n\nIf you are running from a git clone, please run 'npm install' in the project root to fetch these dependencies.";
-            alert(msg);
-            let pleaseWait = document.getElementById("findingChapterUrlsMessageRow");
-            if (pleaseWait) {
-                pleaseWait.textContent = msg;
-                pleaseWait.style.color = "red";
-                pleaseWait.hidden = false;
-            }
-            return;
-        }
         userPreferences = UserPreferences.readFromLocalStorage();
         if (isRunningInTabMode()) { 
             ErrorLog.SuppressErrorLog =  false;
@@ -655,4 +768,3 @@ var main = (function() {
         getUserPreferences: () => userPreferences,
     };
 })();
-

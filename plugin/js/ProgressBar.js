@@ -27,10 +27,43 @@ class ProgressBar { // eslint-disable-line no-unused-vars
         ProgressBar.updateText();
     }
 
+    /**
+     * Switch the bar into "packing" mode, where it shows a 0% to 100%
+     * value instead of "value/max", used while the EPUB file itself
+     * is being assembled (after all chapters have been downloaded).
+     */
+    static startPackingPhase() {
+        ProgressBar.packingPhase = true;
+        let element = ProgressBar.getUiElement();
+        element.max = 100;
+        element.value = 0;
+        ProgressBar.updateText();
+    }
+
+    /**
+     * Update progress while in "packing" mode.
+     * @param {number} value number of items packed so far
+     * @param {number} max total number of items to pack
+     */
+    static setPackingProgress(value, max) {
+        let element = ProgressBar.getUiElement();
+        element.max = 100;
+        element.value = (max > 0) ? Math.round((value * 100) / max) : 100;
+        ProgressBar.updateText();
+    }
+
+    /** Return the bar to normal "value/max" chapter download mode. */
+    static endPackingPhase() {
+        ProgressBar.packingPhase = false;
+    }
+
     static updateText() {
         let element = ProgressBar.getUiElement();
         let text = "";
-        if (1 < element.max) {
+        if (ProgressBar.packingPhase) {
+            text = `${element.value}%`;
+            ProgressBar.updateTabTitle(element.value, 100);
+        } else if (1 < element.max) {
             text = `${element.value}/${element.max}`;
             ProgressBar.updateTabTitle(element.value, element.max);
         }
@@ -45,3 +78,5 @@ class ProgressBar { // eslint-disable-line no-unused-vars
         document.title = value + "% WebToEpub";
     }
 }
+
+ProgressBar.packingPhase = false;

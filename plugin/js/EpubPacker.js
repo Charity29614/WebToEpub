@@ -36,7 +36,11 @@ class EpubPacker {
         return "cover";
     }
 
-    assemble(epubItemSupplier) {
+    /// <param name="onProgress" type="function">
+    /// optional callback, invoked as (itemsPacked, totalItems) while content
+    /// files are being written into the EPUB, and a final time at completion.
+    /// </param>
+    async assemble(epubItemSupplier, onProgress) {
         let zipFileWriter = new zip.BlobWriter("application/epub+zip");
         let zipWriter = new zip.ZipWriter(zipFileWriter,{useWebWorkers: false,compressionMethod: 8, extendedTimestamp: false});
         this.addRequiredFiles(zipWriter);
@@ -45,9 +49,13 @@ class EpubPacker {
         if (this.version === EpubPacker.EPUB_VERSION_3) {
             zipWriter.add("OEBPS/toc.xhtml", new zip.TextReader(this.buildNavigationDocument(epubItemSupplier)));
         }
-        this.packContentFiles(zipWriter, epubItemSupplier);
+        await this.packContentFiles(zipWriter, epubItemSupplier, onProgress);
         zipWriter.add(util.styleSheetFileName(), new zip.TextReader(this.metaInfo.styleSheet));
-        return zipWriter.close();
+        let result = await zipWriter.close();
+        if (typeof onProgress === "function") {
+            onProgress(1, 1);
+        }
+        return result;
     }
 
     static addExtensionIfMissing(fileName) {
@@ -343,13 +351,32 @@ class EpubPacker {
         return navPoint;
     }
 
-    packContentFiles(zipWriter, epubItemSupplier) {
-        for (let file of epubItemSupplier.files()) {
+    async packContentFiles(zipWriter, epubItemSupplier, onProgress) {
+        let files = [...epubItemSupplier.files()];
+        // +1 accounts for the optional cover image XHTML file packed below,
+        // so the percentage still reaches 100% only once everything is done.
+        let totalSteps = files.length + (epubItemSupplier.hasCoverImageFile() ? 1 : 0);
+        let stepsDone = 0;
+        let reportProgress = async () => {
+            if (typeof onProgress === "function") {
+                onProgress(stepsDone, Math.max(totalSteps, 1));
+                // Yield to the event loop so the browser actually gets a
+                // chance to repaint the progress bar. Without this, a long
+                // run of synchronous work blocks rendering entirely and the
+                // UI appears frozen until everything is done.
+                await new Promise(resolve => setTimeout(resolve, 0));
+            }
+        };
+        for (let file of files) {
             file.packInEpub(zipWriter, this.emptyDocFactory, this.contentValidator);
+            ++stepsDone;
+            await reportProgress();
         }
         if (epubItemSupplier.hasCoverImageFile()) {
             let fileContent = epubItemSupplier.makeCoverImageXhtmlFile(this.emptyDocFactory, "Cover");
             zipWriter.add(EpubPacker.coverImageXhtmlHref(), new zip.TextReader(fileContent));
+            ++stepsDone;
+            await reportProgress();
         }
     }
 

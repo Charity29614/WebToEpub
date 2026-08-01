@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -148,6 +148,11 @@
                 </tr>
             </table>
 
+            <div class="progressSection">
+                <button id="packFirst10ChaptersButton" class="expandedButton">Pack First 5 Chapters</button>
+                <button id="packFirst50ChaptersButton" class="expandedButton">Pack First 10 Chapters</button>
+                <button id="packFirst100ChaptersButton" class="expandedButton">Pack First 50 Chapters</button>
+            </div>
             <div class="progressSection">
                 <button id="packEpubButton" class="expandedButton">__MSG_button_Pack_EPUB__</button>
                 <progress id="fetchProgress" value=" 0" max="1"></progress>
@@ -483,6 +488,12 @@
                         <td><input id="overrideMinimumDelayCheckbox" type="checkbox" name="overrideMinimumDelayCheckbox" value="false"></td>
                         <td>__MSG_label_Override_Default_Minimum_Delay__</td>
                     </tr>
+                    <tr id="userAgentRow">
+                        <td colspan="2">
+                            <label for="userAgentInput" style="font-weight:bold;">User-Agent (leave empty for default):</label><br>
+                            <input id="userAgentInput" type="text" name="userAgentInput" style="width: 100%; box-sizing: border-box;" placeholder="e.g. Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36">
+                        </td>
+                    </tr>
                     <tr id="IncludeInReadingListRow">
                         <td><input id="includeInReadingListCheckbox" type="checkbox" name="includeInReadingListCheckbox" value="false"></td>
                         <td>__MSG_label_Include_in_Reading_List__</td>
@@ -679,7 +690,6 @@
         <script src="js/parsers/DefaultParser.js"></script>
         <script src="js/parsers/DeviantArtParser.js"></script>
         <script src="js/parsers/DiurnisParser.js"></script>
-        <script src="js/parsers/DreamyTranslationsParser.js"></script>
         <script src="js/parsers/DudushugeParser.js"></script>
         <script src="js/parsers/DummynovelsParser.js"></script>
         <script src="js/parsers/EdanglarstranslationsParser.js"></script>
@@ -811,7 +821,6 @@
         <script src="js/parsers/NoblemtlParser.js"></script>
         <script src="js/parsers/Novel543Parser.js"></script>
         <script src="js/parsers/NovelAllParser.js"></script>
-        <script src="js/parsers/NovelarrowParser.js"></script>
         <script src="js/parsers/NovelcoolParser.js"></script>
         <script src="js/parsers/NovelCrushParser.js"></script>
         <script src="js/parsers/NoveldexParser.js"></script>
@@ -859,7 +868,6 @@
         <script src="js/parsers/OssantlParser.js"></script>
         <script src="js/parsers/PandaNovelParser.js"></script>
         <script src="js/parsers/PatreonParser.js"></script>
-		<script src="js/parsers/PawchiveParser.js"></script>
         <script src="js/parsers/PawreadParser.js"></script>
         <script src="js/parsers/PeachblossomcodexParser.js"></script>
         <script src="js/parsers/PeachpittingParser.js"></script>
@@ -891,7 +899,6 @@
         <script src="js/parsers/ReadnovelfullorgParser.js"></script>
         <script src="js/parsers/ReadNovelFullParser.js"></script>
         <script src="js/parsers/ReadnovelmtlParser.js"></script>
-        <script src="js/parsers/ReadRiftParser.js"></script>
         <script src="js/parsers/ReadthedramaParser.js"></script>
         <script src="js/parsers/ReadwnParser.js"></script>
         <script src="js/parsers/RebirthOnline.js"></script>
@@ -904,7 +911,6 @@
         <script src="js/parsers/RulateParser.js"></script>
         <script src="js/parsers/RuversParser.js"></script>
         <script src="js/parsers/SangtacvietParser.js"></script>
-        <script src="js/parsers/experimental/Sbxh1Parser.js"></script>
         <script src="js/parsers/ScribblehubParser.js"></script>
         <script src="js/parsers/SecondlifetranslationsParser.js"></script>
         <script src="js/parsers/SemprotParser.js"></script>
@@ -1022,6 +1028,7 @@
         <script src="js/EpubItemSupplier.js"></script>
         <script src="js/CoverImageUI.js"></script>
         <script src="js/parsers/SonakoParser.js"></script>
+        <script src="js/parsers/CustomParsers/NovelshavenParser.js"></script>
         <script src="js/EpubPacker.js"></script>
         <script src="js/main.js"></script>
     </span>

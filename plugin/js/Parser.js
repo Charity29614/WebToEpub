@@ -542,8 +542,8 @@ class Parser {
 
     setUiToShowLoadingProgress(length) {
         main.getPackEpubButton().disabled = true;
-        ProgressBar.setMax(length + 1);
-        ProgressBar.setValue(1);
+        ProgressBar.setMax(length);
+        ProgressBar.setValue(0);
     }
 
     async fetchWebPages() {
@@ -559,21 +559,20 @@ class Parser {
 
         await this.addParsersToPages(pagesToFetch);
         let index = 0;
-        try
-        {
-            let group = this.groupPagesToFetch(pagesToFetch, index);
-            while (0 < group.length) {
-                await Promise.all(group.map(async (webPage) => this.fetchWebPageContent(webPage)));
-                index += group.length;
-                group = this.groupPagesToFetch(pagesToFetch, index);
-                if (util.sleepController.signal.aborted) {
-                    break;
+        let group = this.groupPagesToFetch(pagesToFetch, index);
+        while (0 < group.length) {
+            await Promise.all(group.map(async (webPage) => {
+                try {
+                    await this.fetchWebPageContent(webPage);
+                } catch (err) {
+                    ErrorLog.log(err);
                 }
+            }));
+            index += group.length;
+            group = this.groupPagesToFetch(pagesToFetch, index);
+            if (util.sleepController.signal.aborted) {
+                break;
             }
-        }
-        catch (err)
-        {
-            ErrorLog.log(err);
         }
     }
 
@@ -590,26 +589,43 @@ class Parser {
         await this.rateLimitDelay();
         ChapterUrlsUI.showDownloadState(webPage.row, ChapterUrlsUI.DOWNLOAD_STATE_DOWNLOADING);
         let pageParser = webPage.parser;
-        try {
-            let webPageDom = await pageParser.fetchChapter(webPage.sourceUrl);
-            delete webPage.error;
-            webPage.rawDom = webPageDom;
-            pageParser.preprocessRawDom(webPageDom);
-            pageParser.removeUnusedElementsToReduceMemoryConsumption(webPageDom);
-            let content = pageParser.findContent(webPage.rawDom);
-            if (content == null) {
-                let errorMsg = UIText.Error.errorContentNotFound(webPage.sourceUrl);
-                throw new Error(errorMsg);
+        const maxRetries = 4;
+        // Delay in ms before each retry attempt (15s, 30s, 60s, 120s)
+        const retryDelays = [15000, 30000, 60000, 120000];
+        let lastError;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            if (attempt > 0) {
+                let delay = retryDelays[attempt - 1];
+                ChapterUrlsUI.showDownloadState(webPage.row, ChapterUrlsUI.DOWNLOAD_STATE_SLEEPING);
+                await util.sleep(delay);
+                ChapterUrlsUI.showDownloadState(webPage.row, ChapterUrlsUI.DOWNLOAD_STATE_DOWNLOADING);
             }
-            return pageParser.fetchImagesUsedInDocument(content, webPage);
-        } catch (error) {
-            if (this.userPreferences.skipChaptersThatFailFetch.value) {
-                ErrorLog.log(error);
-                webPage.error = error;
-            } else {
-                webPage.isIncludeable = false;
-                throw error;
+            try {
+                let webPageDom = await pageParser.fetchChapter(webPage.sourceUrl);
+                delete webPage.error;
+                webPage.rawDom = webPageDom;
+                pageParser.preprocessRawDom(webPageDom);
+                pageParser.removeUnusedElementsToReduceMemoryConsumption(webPageDom);
+                let content = pageParser.findContent(webPage.rawDom);
+                if (content == null) {
+                    let errorMsg = UIText.Error.errorContentNotFound(webPage.sourceUrl);
+                    throw new Error(errorMsg);
+                }
+                return pageParser.fetchImagesUsedInDocument(content, webPage);
+            } catch (error) {
+                lastError = error;
+                if (attempt < maxRetries) {
+                    ErrorLog.log(`Attempt ${attempt + 1} failed for ${webPage.sourceUrl}, retrying... (${error.message})`);
+                }
             }
+        }
+        // All attempts exhausted
+        if (this.userPreferences.skipChaptersThatFailFetch.value) {
+            ErrorLog.log(lastError);
+            webPage.error = lastError;
+        } else {
+            webPage.isIncludeable = false;
+            throw lastError;
         }
     }
 

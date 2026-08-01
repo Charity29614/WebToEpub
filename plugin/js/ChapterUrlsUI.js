@@ -127,14 +127,18 @@ class ChapterUrlsUI {
         util.removeElements([...ChapterUrlsUI.getRangeEndChapterSelect().options]);
     }
 
-    static limitNumOfChapterS(maxChapters) {
+    static limitNumOfChapterS(maxChapters, silent = false) {
         let max = util.isNullOrEmpty(maxChapters) ? 10000 : parseInt(maxChapters.replace(",", ""));
         let selectedRows = [...ChapterUrlsUI.getChapterUrlsTable().querySelectorAll("[type='checkbox'")]
             .filter(c => c.checked)
             .map(c => c.parentElement.parentElement);
-        if (max< selectedRows.length ) {
-            let message = UIText.Chapter.maxChaptersSelected(selectedRows.length, max);
-            if (confirm(message) === false) {
+        if (max < selectedRows.length) {
+            let proceedToTrim = silent;
+            if (!proceedToTrim) {
+                let message = UIText.Chapter.maxChaptersSelected(selectedRows.length, max);
+                proceedToTrim = (confirm(message) === false);
+            }
+            if (proceedToTrim) {
                 for (let row of selectedRows.slice(max)) {
                     ChapterUrlsUI.setRowCheckboxState(row, false);
                 }
@@ -332,6 +336,19 @@ class ChapterUrlsUI {
         return col;
     }
 
+    /**
+    * @private
+    * Polyfill for URL.canParse() which is not available in older Chromium versions (e.g. Kiwi Browser).
+    */
+    static canParseURL(url) {
+        try {
+            new URL(url);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
     /** 
     * @public
     */
@@ -355,7 +372,7 @@ class ChapterUrlsUI {
             let chapters;
             let lines = inputvalue.split("\n");
             lines = lines.filter(a => a.trim() != "").map(a => a.trim());
-            if (URL.canParse(lines[0])) {
+            if (ChapterUrlsUI.canParseURL(lines[0])) {
                 chapters = this.URLsToChapters(lines);
             } else {
                 chapters = this.htmlToChapters(inputvalue);

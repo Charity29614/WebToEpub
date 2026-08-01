@@ -116,7 +116,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         this.compressImagesMaxResolution = this.addPreference("compressImagesMaxResolution", "compressImagesMaxResolutionTag", "1080");
         this.overwriteExistingEpub = this.addPreference("overwriteExistingEpub", "overwriteEpubWhenDuplicateFilenameCheckbox", false);
         this.themeColor = this.addPreference("themeColor", "themeColorTag", "");
-        this.useFullTitle = this.addPreference("useFullTitle", "useFullTitleAsFileNameCheckbox", false);
+        this.useFullTitle = this.addPreference("useFullTitle", "useFullTitleAsFileNameCheckbox", true);
         this.addInformationPage = this.addPreference("addInformationPage", "addInformationPageToEpubCheckbox", true);
         this.lesstags = this.addPreference("lesstags", "lesstagsCheckbox", true);
         this.autosearchmetadata = this.addPreference("autosearchmetadata", "autosearchmetadataCheckbox", false);
@@ -128,6 +128,7 @@ class UserPreferences { // eslint-disable-line no-unused-vars
         this.disableShiftClickAlert = this.addPreference("disableShiftClickAlert", "disableShiftClickAlertCheckbox", false);
         this.disableImageResError = this.addPreference("disableImageResError", "disableImageResErrorCheckbox", false);
         this.disableWebpImageFormatError = this.addPreference("disableWebpImageFormatError", "disableWebpImageFormatErrorCheckbox", false);
+        this.userAgent = this.addPreference("userAgent", "userAgentInput", "");
 
         document.getElementById("themeColorTag").addEventListener("change", UserPreferences.SetTheme);
     }

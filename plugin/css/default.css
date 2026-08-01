@@ -14,10 +14,12 @@
 }
 
 #progressString {
-    width: 36px;
+    width: auto;
+    white-space: nowrap;
     display: inline-block;
     position: absolute;
     left: 46%;
+    transform: translateX(-50%);
     color: white;
     z-index: 1000;
     font-weight: bolder;
